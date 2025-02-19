@@ -1,36 +1,42 @@
 library(rio)
-dat1=import("data/fasting.xlsx", sheet="HYPOGLYCEMIA")
-
+outcomes=c("COMPOSITE", "HYPERGLYCEMIA", "HYPOGLYCEMIA", 
+           "HYPOTENSION", "NAUSEAVOMIT", "PNEUMONIA")
+outcome=6
+dat1=import("data/fasting2.xlsx", sheet=outcomes[outcome])
+print(outcomes[outcome])
 # estimate baseline event rate
 p1=metaprop(event=events.C, n=total.C, data=dat1, method="glm")
 p2=metaprop(event=events.E, n=total.E, data=dat1, method="glm")
-#forest(p1)
+forest(p1)
 
 # MH without cc
 library(meta)
-m1=metabin(event.e = events.E, n.e=total.E, event.c = events.C, n.c=total.C, 
+m1=metabin(event.c = events.E, n.c=total.E, event.e = events.C, n.e=total.C, 
            studlab=study, 
            method = "MH", data=dat1, MH.exact = T, prediction=T  ,
            sm="OR")
-forest(m1, label.left="favors fasting", label.right = "favors control", 
-       main="Composite outcome",prediction=T,label.e="Fasting", header=T, xlim=c(0.2,5))
+forest(m1, label.left="favors fasting", label.right = "favors non-fasting", 
+       main="Composite outcome", header=T, xlim=c(0.1,5), 
+       label.e="Fasting",label.c="Non-fasting", prediction=T)
 
 
 # Mantel-Haenszel odds-ratio with 0.5 continuity correction
-m2=metabin(event.e = events.E, n.e=total.E, event.c = events.C, n.c=total.C, 
+m2=metabin(event.c = events.E, n.c=total.E, event.e = events.C, n.e=total.C,
            studlab=study, MH.exact = F,
            method = "inverse", data=dat1 ,prediction=T  ,
            sm="OR", incr=0.5)
-forest(m2, label.left="favors fasting", label.right = "favors control", 
-       main="Composite outcome",prediction=T, header=T, xlim=c(0.2,5))
+forest(m2,  label.left="favors fasting", label.right = "favors non-fasting", 
+       main="Composite outcome", header=T, xlim=c(0.1,5), 
+       label.e="Fasting",label.c="Non-fasting", prediction=T)
 
 
 # Mantel-Haenszel risk-difference with no continuity correction
-MH.RD<- metabin(event.e = events.E, n.e=total.E, event.c = events.C, n.c=total.C, 
+MH.RD<- metabin(event.c = events.E, n.c=total.E, event.e = events.C, n.e=total.C,
                 studlab=study, MH.exact = T, data=dat1 ,prediction=T  ,
                 sm="RD")
-forest(MH.RD, label.left="favors fasting", label.right = "favors control", 
-       main="Composite outcome", label.e="Fasting",header=T, xlim=c(-0.1,.1))
+forest(MH.RD,  label.left="favors fasting", label.right = "favors non-fasting", 
+       main="Composite outcome", header=T, xlim=c(-0.1,0.1), 
+       label.e="Fasting",label.c="Non-fasting", prediction=T)
 
 
 #### Bayesian RE - MA ----------------------------------
@@ -53,26 +59,18 @@ or<-exp(mu)
 }
 "
 model1.spec<-textConnection(model) 
-data <- list(NS=length(dat1$study), events.treat=dat1$events.E, events.control=dat1$events.C, 
-             total.treat=dat1$total.E, total.control=dat1$total.C)
+data <- list(NS=length(dat1$study), events.treat=dat1$events.C, events.control=dat1$events.E, 
+             total.treat=dat1$total.C, total.control=dat1$total.E)
 jags.m=0
-n.chains =4
-jags.m <- jags.model(model1.spec, data = data, n.chains =n.chains, n.adapt = 500)
+n.chains =6
+jags.m <- jags.model(model1.spec, data = data, n.chains =n.chains, n.adapt = 5000)
 
 params <- c("or", "tauOR.s") 
 closeAllConnections()
-sampsRE<- coda.samples(jags.m, params, n.iter =10000)
+sampsRE<- coda.samples(jags.m, params, n.iter =100000)
 
 library(MCMCvis)
 MCMCsummary(sampsRE)
 MCMCtrace(sampsRE,pdf = FALSE, params = "or") 
-
-
-all.sampsRE=sampsRE[[1]]
-for(i in 2:n.chains){ all.sampsRE=rbind(all.sampsRE, sampsRE[[i]])}
-mean(all.sampsRE[,1]<1)
-
-library(ggplot2)
-all.sampsHRRE=data.frame(HR=all.sampsRE[,1])
 
 
